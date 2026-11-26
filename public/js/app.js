@@ -35,18 +35,18 @@ function el(tag, cls, text) {
 function renderProgress(root, state, { timeOrigin = state.lockedAt ?? 0, expected = null, onAgain = null } = {}) {
   root.replaceChildren();
   if (state.count === null) {
-    root.append(el("p", "waiting", state.everLocked ? "Reading the first block…" : "Point the camera at the sender’s chart."));
+    root.append(el("p", "waiting", state.everLocked ? "最初のブロックを読み取り中…" : "送信側の譜面にカメラを向けてください。"));
     return;
   }
   const times = new Map(state.blocks.map((b) => [b.index, b.time]));
   const list = el("ol", "blocks");
   for (let i = 0; i < state.count; i++) {
     const li = el("li", times.has(i) ? "got" : "");
-    li.append(el("span", "bname", `Block ${i + 1}/${state.count}`));
+    li.append(el("span", "bname", `ブロック ${i + 1}/${state.count}`));
     if (times.has(i)) {
-      li.append(el("span", "judge", "PGREAT"), el("span", "btime", `${(times.get(i) - timeOrigin).toFixed(2)} s`));
+      li.append(el("span", "judge", "PGREAT"), el("span", "btime", `${(times.get(i) - timeOrigin).toFixed(2)} 秒`));
     } else {
-      li.append(el("span", "reading", "reading…"));
+      li.append(el("span", "reading", "読み取り中…"));
     }
     list.append(li);
   }
@@ -59,23 +59,23 @@ function renderProgress(root, state, { timeOrigin = state.lockedAt ?? 0, expecte
   if (!state.done) return;
   const done = el("div", "done");
   const ok = expected === null || expected === state.text;
-  done.append(el("p", ok ? "complete" : "mismatch", ok ? "Transfer complete" : "Mismatch"));
+  done.append(el("p", ok ? "complete" : "mismatch", ok ? "受信完了" : "内容が一致しません"));
   const pair = el("p", "pair");
-  pair.append("Pairing number ", el("strong", "", state.pairing));
-  done.append(pair, el("p", "took", `in ${(state.doneAt - timeOrigin).toFixed(2)} s`));
+  pair.append("ペアリング番号 ", el("strong", "", state.pairing));
+  done.append(pair, el("p", "took", `所要時間 ${(state.doneAt - timeOrigin).toFixed(2)} 秒`));
   const actions = el("div", "actions");
-  const copy = el("button", "primary", "Copy");
+  const copy = el("button", "primary", "コピー");
   copy.onclick = async () => {
     try {
       await navigator.clipboard.writeText(state.text);
-      copy.textContent = "Copied";
+      copy.textContent = "コピーしました";
     } catch {
-      copy.textContent = "Copy failed";
+      copy.textContent = "コピーできませんでした";
     }
   };
   actions.append(copy);
   if (onAgain) {
-    const again = el("button", "", "Receive another");
+    const again = el("button", "", "続けて受信");
     again.onclick = onAgain;
     actions.append(again);
   }
@@ -84,9 +84,9 @@ function renderProgress(root, state, { timeOrigin = state.lockedAt ?? 0, expecte
 }
 
 function statusText(state) {
-  if (state.done) return ["Done", "ok"];
-  if (state.locked) return ["Locked on, reading chart", "lock"];
-  return [state.everLocked ? "Re-acquiring…" : "Searching for chart…", ""];
+  if (state.done) return ["完了", "ok"];
+  if (state.locked) return ["譜面を捕捉、読み取り中", "lock"];
+  return [state.everLocked ? "再捕捉中…" : "譜面を探しています…", ""];
 }
 
 function drawQuad(ctx, corners, map) {
@@ -112,9 +112,9 @@ const message = $("message");
 function updateCounter() {
   const bytes = utf8Length(message.value);
   const over = bytes > MAX_TEXT_BYTES;
-  $("byte-count").textContent = `${bytes} / ${MAX_TEXT_BYTES} bytes`;
+  $("byte-count").textContent = `${bytes} / ${MAX_TEXT_BYTES} バイト`;
   $("byte-count").classList.toggle("over", over);
-  $("block-count").textContent = bytes ? `${Math.ceil((bytes + 1) / CHUNK)} block${bytes + 1 > CHUNK ? "s" : ""}` : "";
+  $("block-count").textContent = bytes ? `${Math.ceil((bytes + 1) / CHUNK)} ブロック` : "";
   $("start").disabled = over || bytes === 0;
 }
 message.addEventListener("input", updateCounter);
@@ -169,12 +169,12 @@ async function startSender() {
     drawStatic(ctx);
     drawChart(ctx, bits, (G.speed * (now - t0)) / 1000);
     ctx.fillStyle = "#c8c8cc";
-    ctx.font = "600 15px system-ui, -apple-system, sans-serif";
+    ctx.font = '600 15px system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif';
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.fillText(`Pairing number  ${pairing}`, G.frameX + 4, 800);
+    ctx.fillText(`ペアリング番号  ${pairing}`, G.frameX + 4, 800);
     ctx.textAlign = "right";
-    ctx.fillText(`${blocks.length} block${blocks.length > 1 ? "s" : ""}`, G.frameX + G.frameWidth - 4, 800);
+    ctx.fillText(`${blocks.length} ブロック`, G.frameX + G.frameWidth - 4, 800);
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);
@@ -197,19 +197,19 @@ addEventListener("keydown", (e) => e.key === "Escape" && player?.());
 // Receiver
 
 function cameraError(err) {
-  if (!window.isSecureContext) return "The camera needs a secure page. Open this site over HTTPS or on localhost.";
-  if (!navigator.mediaDevices?.getUserMedia) return "This browser can’t use the camera.";
+  if (!window.isSecureContext) return "カメラを使うには安全な接続が必要です。HTTPS か localhost でこのページを開いてください。";
+  if (!navigator.mediaDevices?.getUserMedia) return "このブラウザではカメラを使用できません。";
   switch (err?.name) {
     case "NotAllowedError":
     case "SecurityError":
-      return "Camera access was denied. Allow camera access for this site in your browser settings, then reload.";
+      return "カメラへのアクセスが許可されていません。ブラウザの設定でこのサイトのカメラを許可してから、ページを再読み込みしてください。";
     case "NotFoundError":
     case "OverconstrainedError":
-      return "No camera was found on this device.";
+      return "このデバイスにカメラが見つかりません。";
     case "NotReadableError":
-      return "The camera is in use by another app.";
+      return "カメラが別のアプリで使用中です。";
     default:
-      return `The camera couldn’t start${err?.message ? `: ${err.message}` : "."}`;
+      return `カメラを起動できませんでした${err?.message ? `（${err.message}）` : "。"}`;
   }
 }
 
@@ -243,7 +243,7 @@ function startReceiver() {
   };
 
   errorBox.hidden = true;
-  status.textContent = "Starting camera…";
+  status.textContent = "カメラを起動中…";
   status.className = "status";
   progress.replaceChildren();
 
@@ -352,11 +352,11 @@ function startReceiver() {
   };
 
   const fail = (err) => {
-    status.textContent = "No camera";
+    status.textContent = "カメラを使用できません";
     errorBox.hidden = false;
     errorBox.replaceChildren(el("p", "", cameraError(err)));
     const p = el("p", "");
-    const a = el("a", "", "Try the loopback demo instead");
+    const a = el("a", "", "代わりにループバックデモを試す");
     a.href = "#demo";
     p.append(a);
     errorBox.append(p);
@@ -365,14 +365,14 @@ function startReceiver() {
   const start = async () => {
     try {
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw null;
-      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: "environment", width: { ideal: 1280 } } });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: "environment", width: { ideal: 1280 }, frameRate: { ideal: 60 } } });
       if (stopped) {
         stream.getTracks().forEach((t) => t.stop());
         return;
       }
       video.srcObject = stream;
       await video.play();
-      status.textContent = "Searching for chart…";
+      status.textContent = "譜面を探しています…";
       schedule();
     } catch (err) {
       fail(err);
@@ -450,7 +450,7 @@ function startDemo() {
       $("demo-status").className = `state ${cls}`;
       renderProgress(progress, s, { timeOrigin: 0, expected: text });
       if (s.done) finished = s.doneAt;
-      $("demo-time").textContent = `${(finished ?? (performance.now() - t0) / 1000).toFixed(2)} s`;
+      $("demo-time").textContent = `${(finished ?? (performance.now() - t0) / 1000).toFixed(2)} 秒`;
     };
     const frame = (now) => {
       const t = (now - t0) / 1000;
@@ -462,7 +462,7 @@ function startDemo() {
       drawStatic(cctx);
       drawChart(cctx, bits, G.speed * t);
       if (finished === null) {
-        $("demo-time").textContent = `${t.toFixed(2)} s`;
+        $("demo-time").textContent = `${t.toFixed(2)} 秒`;
         if (!busy) {
           busy = true;
           worker.postMessage({ type: "sim-frame", id, t });
