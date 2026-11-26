@@ -13,7 +13,7 @@ const laneX0 = [];
     x += w + divider;
   }
 }
-const pitch = 56;
+const pitch = 112;
 const leftGutterX = frameX + gutter / 2;
 const rightGutterX = frameX + frameWidth - gutter / 2;
 
@@ -36,8 +36,8 @@ export const G = Object.freeze({
   pitch,
   noteH: 14,
   measure: 8 * pitch,
-  rowsPerSecond: 16,
-  speed: 16 * pitch,
+  rowsPerSecond: 8,
+  speed: 8 * pitch,
   fiducialSize: 14,
   fiducials: [
     [leftGutterX, 50],
