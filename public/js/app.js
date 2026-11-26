@@ -130,10 +130,6 @@ async function startSender() {
   const ctx = canvas.getContext("2d", { alpha: false });
   $("player").hidden = false;
   document.body.classList.add("playing");
-  const root = document.documentElement;
-  try {
-    await root.requestFullscreen?.({ navigationUI: "hide" });
-  } catch {}
   let wakeLock = null;
   const lock = async () => {
     try {
@@ -188,7 +184,6 @@ async function startSender() {
     removeEventListener("resize", resize);
     document.removeEventListener("visibilitychange", onVisible);
     wakeLock?.release().catch(() => {});
-    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
     $("player").hidden = true;
     document.body.classList.remove("playing");
     player = null;
@@ -198,9 +193,6 @@ async function startSender() {
 $("start").onclick = () => startSender();
 $("stop").onclick = () => player?.();
 addEventListener("keydown", (e) => e.key === "Escape" && player?.());
-document.addEventListener("fullscreenchange", () => {
-  if (!document.fullscreenElement && player && matchMedia("(pointer: fine)").matches) player();
-});
 
 // Receiver
 
