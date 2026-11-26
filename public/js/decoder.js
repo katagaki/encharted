@@ -4,6 +4,15 @@ import { decodeBlock, MAX_BLOCKS, ROWS } from "./codec.js";
 
 export const TUNING = {
   greenThreshold: 0.18,
+  minGreenThreshold: 0.06,
+  greenTopFraction: 0.0004,
+  maxCornerCandidates: 9,
+  cornerAreaSpread: 5,
+  maxSideRatio: 1.8,
+  maxAspectError: 1.6,
+  verifyCandidates: 4,
+  redMargin: 0.08,
+  minRedLanes: 3,
   minQuadFraction: 4000 / (216 * 384),
   maxBlobFraction: 800 / (216 * 384),
   barWindow: 30,
@@ -147,9 +156,20 @@ export class ChartDecoder {
   findHomography(img) {
     const { width: w, height: h, data } = img;
     const n = w * h;
-    const thr = TUNING.greenThreshold * 255;
-    const green = new Float32Array(n);
-    for (let i = 0, j = 0; i < n; i++, j += 4) green[i] = data[j + 1] - Math.max(data[j], data[j + 2]);
+    const green = new Int16Array(n);
+    const hist = new Uint32Array(256);
+    for (let i = 0, j = 0; i < n; i++, j += 4) {
+      const g = data[j + 1] - Math.max(data[j], data[j + 2]);
+      green[i] = g;
+      if (g > 0) hist[g]++;
+    }
+    let top = 0, v = 255;
+    const need = Math.max(16, Math.round(n * TUNING.greenTopFraction));
+    for (; v > 0; v--) {
+      top += hist[v];
+      if (top >= need) break;
+    }
+    const thr = Math.min(TUNING.greenThreshold * 255, Math.max(TUNING.minGreenThreshold * 255, 0.5 * v));
     const seen = new Uint8Array(n);
     const maxArea = Math.max(800, TUNING.maxBlobFraction * n);
     const blobs = [];
@@ -161,22 +181,70 @@ export class ChartDecoder {
       let sx = 0, sy = 0, sw = 0, area = 0;
       while (stack.length) {
         const i = stack.pop();
-        const x = i % w, y = (i / w) | 0, g = green[i] / 255;
+        const x = i % w, y = (i / w) | 0, g = green[i] - thr + 1;
         sx += x * g; sy += y * g; sw += g; area++;
         if (x > 0 && !seen[i - 1] && green[i - 1] > thr) { seen[i - 1] = 1; stack.push(i - 1); }
         if (x < w - 1 && !seen[i + 1] && green[i + 1] > thr) { seen[i + 1] = 1; stack.push(i + 1); }
         if (y > 0 && !seen[i - w] && green[i - w] > thr) { seen[i - w] = 1; stack.push(i - w); }
         if (y < h - 1 && !seen[i + w] && green[i + w] > thr) { seen[i + w] = 1; stack.push(i + w); }
       }
-      if (area >= 4 && area <= maxArea) blobs.push({ x: sx / sw + 0.5, y: sy / sw + 0.5, area });
+      if (area >= 3 && area <= maxArea) blobs.push({ x: sx / sw + 0.5, y: sy / sw + 0.5, area });
     }
     if (blobs.length < 4) return null;
-    const four = blobs.sort((a, b) => b.area - a.area).slice(0, 4).sort((a, b) => a.y - b.y);
-    const top = four.slice(0, 2).sort((a, b) => a.x - b.x), bottom = four.slice(2).sort((a, b) => a.x - b.x);
-    const quadArea = Math.abs((top[1].x - bottom[0].x) * (top[0].y - bottom[1].y) - (top[0].x - bottom[1].x) * (top[1].y - bottom[0].y)) / 2;
-    if (quadArea <= TUNING.minQuadFraction * n) return null;
-    this.lastCorners = [top[0], top[1], bottom[1], bottom[0]].map((b) => [b.x, b.y]);
-    return Homography.fit(G.fiducials, [top[0], top[1], bottom[0], bottom[1]].map((b) => [b.x, b.y]));
+    const cand = blobs.sort((a, b) => b.area - a.area).slice(0, TUNING.maxCornerCandidates);
+    const expected = (G.fiducials[2][1] - G.fiducials[0][1]) / (G.fiducials[1][0] - G.fiducials[0][0]);
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const options = [];
+    for (let i = 0; i < cand.length; i++)
+      for (let j = i + 1; j < cand.length; j++)
+        for (let k = j + 1; k < cand.length; k++)
+          for (let l = k + 1; l < cand.length; l++) {
+            const four = [cand[i], cand[j], cand[k], cand[l]];
+            const areas = four.map((b) => b.area);
+            if (Math.max(...areas) > TUNING.cornerAreaSpread * Math.min(...areas)) continue;
+            const byY = [...four].sort((a, b) => a.y - b.y);
+            const [tl, tr] = byY.slice(0, 2).sort((a, b) => a.x - b.x);
+            const [bl, br] = byY.slice(2).sort((a, b) => a.x - b.x);
+            const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+            const turns = [cross(tl, tr, br), cross(tr, br, bl), cross(br, bl, tl), cross(bl, tl, tr)];
+            if (!(turns.every((c) => c > 0) || turns.every((c) => c < 0))) continue;
+            const quadArea = Math.abs((tr.x - bl.x) * (tl.y - br.y) - (tl.x - br.x) * (tr.y - bl.y)) / 2;
+            if (quadArea <= TUNING.minQuadFraction * n) continue;
+            const wTop = dist(tl, tr), wBot = dist(bl, br), hL = dist(tl, bl), hR = dist(tr, br);
+            const sideSkew = Math.max(wTop / wBot, wBot / wTop, hL / hR, hR / hL);
+            if (sideSkew > TUNING.maxSideRatio) continue;
+            const ratio = (hL + hR) / (wTop + wBot) / expected;
+            if (ratio < 1 / TUNING.maxAspectError || ratio > TUNING.maxAspectError) continue;
+            const score = Math.abs(Math.log(ratio)) + 0.5 * Math.log(sideSkew) - 0.05 * Math.log(Math.min(...areas));
+            options.push({ score, corners: [tl, tr, bl, br] });
+          }
+    options.sort((a, b) => a.score - b.score);
+    const lumaAt = (x, y) => {
+      const xi = Math.round(x), yi = Math.round(y);
+      if (xi < 0 || yi < 0 || xi >= w || yi >= h) return null;
+      const j = (yi * w + xi) * 4;
+      return [data[j], data[j + 1], data[j + 2]];
+    };
+    for (const opt of options.slice(0, TUNING.verifyCandidates)) {
+      const [tl, tr, bl, br] = opt.corners;
+      const hom = Homography.fit(G.fiducials, [tl, tr, bl, br].map((b) => [b.x, b.y]));
+      if (!hom) continue;
+      let red = 0, total = 0;
+      for (let lane = 0; lane < 8; lane++) {
+        const cx = G.laneX0[lane] + G.laneWidths[lane] / 2;
+        const px = lumaAt(...hom.apply(cx, G.judgeY - 0.5));
+        if (!px) continue;
+        total++;
+        if (px[0] - Math.max(px[1], px[2]) > TUNING.redMargin * 255) red++;
+      }
+      if (options.length > 1 && total && red < TUNING.minRedLanes) continue;
+      this.lastCorners = [tl, tr, br, bl].map((b) => [b.x, b.y]);
+      return hom;
+    }
+    if (!options.length) return null;
+    const [tl, tr, bl, br] = options[0].corners;
+    this.lastCorners = [tl, tr, br, bl].map((b) => [b.x, b.y]);
+    return Homography.fit(G.fiducials, [tl, tr, bl, br].map((b) => [b.x, b.y]));
   }
 
   barPhase(at, t) {

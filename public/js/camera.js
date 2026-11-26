@@ -74,6 +74,9 @@ export class Camera {
     this.handheld = sc.handheld;
     this.approach = sc.approach;
     this.readout = sc.readout ?? 0;
+    this.desaturate = sc.desaturate ?? 0;
+    this.channelGain = sc.channelGain ?? [1, 1, 1];
+    this.distractors = Array.from({ length: sc.distractors ?? 0 }, () => ({ x: rng.range(10, 206), y: rng.range(10, 374), r: rng.range(4, 9) }));
     this.wobble = Array.from({ length: 8 }, () => ({ f: rng.range(0.15, 0.9), p: rng.range(0, 2 * Math.PI) }));
     this.lastPose = null;
     this.shake = [0, 0];
@@ -162,6 +165,23 @@ export class Camera {
           const a = blob.s * Math.exp(-(dx * dx + dy * dy) / (2 * blob.r * blob.r));
           const i = (y * W + x) * 3;
           img[i] += a; img[i + 1] += a; img[i + 2] += a;
+        }
+      }
+    }
+    if (this.desaturate > 0 || this.channelGain.some((g) => g !== 1)) {
+      const [gr, gg, gb] = this.channelGain, ds = this.desaturate;
+      for (let i = 0; i < W * H * 3; i += 3) {
+        const l = 0.3 * img[i] + 0.59 * img[i + 1] + 0.11 * img[i + 2];
+        img[i] = (img[i] + (l - img[i]) * ds) * gr;
+        img[i + 1] = (img[i + 1] + (l - img[i + 1]) * ds) * gg;
+        img[i + 2] = (img[i + 2] + (l - img[i + 2]) * ds) * gb;
+      }
+    }
+    for (const d of this.distractors) {
+      for (let y = Math.max(0, Math.trunc(d.y - d.r)); y < Math.min(H, Math.trunc(d.y + d.r)); y++) {
+        for (let x = Math.max(0, Math.trunc(d.x - d.r)); x < Math.min(W, Math.trunc(d.x + d.r)); x++) {
+          const i = (y * W + x) * 3;
+          img[i] = 0.15; img[i + 1] = 0.85; img[i + 2] = 0.2;
         }
       }
     }
