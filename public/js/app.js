@@ -231,7 +231,16 @@ function startReceiver() {
   let lastMedia = -1;
   let stalls = 0;
   let useMediaTime = true;
+  let timeSource = "clock";
   let lastState = null;
+  const diagToggle = $("rx-diag");
+  const diagText = $("rx-diag-text");
+  const arrivals = [];
+  diagText.hidden = !diagToggle.checked;
+  diagToggle.onchange = () => {
+    diagText.hidden = !diagToggle.checked;
+    worker.postMessage({ type: "debug", on: diagToggle.checked });
+  };
 
   errorBox.hidden = true;
   status.textContent = "Starting camera…";
@@ -244,7 +253,7 @@ function startReceiver() {
     done = false;
     busy = false;
     lastState = null;
-    worker.postMessage({ type: "reset", id: session });
+    worker.postMessage({ type: "reset", id: session, debug: diagToggle.checked });
     renderProgress(progress, { count: null, everLocked: false });
     octx.clearRect(0, 0, overlay.width, overlay.height);
     if (wasDone) schedule();
@@ -257,6 +266,20 @@ function startReceiver() {
     status.className = `status ${cls}`;
     renderProgress(progress, state, { onAgain: reset });
     paintOverlay();
+    if (state.diag) {
+      const now = performance.now();
+      arrivals.push(now);
+      while (arrivals[0] < now - 1000) arrivals.shift();
+      const g = state.diag;
+      diagText.textContent = [
+        `frames ${g.processed} decoded/s ${arrivals.length}  time ${timeSource} ${g.t.toFixed(2)}`,
+        `video ${video.videoWidth}×${video.videoHeight}  proc ${proc.width}×${proc.height}`,
+        `no corners ${g.skippedFiducials}  no bar ${g.skippedBars}  coasted ${g.coasted}`,
+        `skew ${g.skew.toFixed(1)}  speed ${(g.speed / G.pitch).toFixed(2)} rows/s  loop votes ${g.votes.join(" ")}`,
+        `lane contrast ${g.contrast.map((c) => c.toFixed(2)).join(" ")}`,
+        `cells seen ≥3× ${(g.observed * 100).toFixed(0)}%  blocks ${state.count ?? "?"}`,
+      ].join("\n");
+    }
     if (state.done && !done) {
       done = true;
       navigator.vibrate?.(60);
@@ -276,7 +299,17 @@ function startReceiver() {
     const k = Math.min(cw / vw, ch / vh);
     const dx = (cw - vw * k) / 2, dy = (ch - vh * k) / 2;
     const sx = vw / proc.width;
-    drawQuad(octx, lastState.corners, (x, y) => [(dx + x * sx * k) * dpr, (dy + y * sx * k) * dpr]);
+    const map = (x, y) => [(dx + x * sx * k) * dpr, (dy + y * sx * k) * dpr];
+    drawQuad(octx, lastState.corners, map);
+    if (lastState.diag) {
+      for (const [x, y, v] of lastState.diag.samples) {
+        const [px, py] = map(x, y);
+        octx.fillStyle = v > 0 ? "rgba(255, 60, 200, 0.95)" : "rgba(0, 200, 255, 0.8)";
+        octx.beginPath();
+        octx.arc(px, py, (v > 0 ? 3.5 : 2) * dpr, 0, Math.PI * 2);
+        octx.fill();
+      }
+    }
   };
 
   const onFrame = (now, meta) => {
@@ -284,8 +317,10 @@ function startReceiver() {
     schedule();
     if (busy || !video.videoWidth) return;
     let t = now / 1000;
-    if (useMediaTime && meta?.mediaTime !== undefined) {
-      if (meta.mediaTime <= lastMedia) {
+    timeSource = "clock";
+    const stamp = typeof meta?.captureTime === "number" ? meta.captureTime / 1000 : meta?.mediaTime;
+    if (useMediaTime && typeof stamp === "number") {
+      if (stamp <= lastMedia) {
         if (++stalls > 10) {
           useMediaTime = false;
           reset();
@@ -293,8 +328,9 @@ function startReceiver() {
         return;
       }
       stalls = 0;
-      lastMedia = meta.mediaTime;
-      t = meta.mediaTime;
+      lastMedia = stamp;
+      t = stamp;
+      timeSource = typeof meta.captureTime === "number" ? "captureTime" : "mediaTime";
     }
     const vw = video.videoWidth, vh = video.videoHeight;
     const k = PROC_LONG_SIDE / Math.max(vw, vh);

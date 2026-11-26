@@ -203,3 +203,6 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   #demo-chart { width: min(100%, calc((100vh - 190px) * 390 / 844)); }
   .simcam { width: min(100%, calc((100vh - 190px) * 216 / 384)); }
 }
+
+.diag-toggle { display: inline-flex; gap: 6px; align-items: center; color: var(--dim); font-size: 14px; margin-top: 10px; }
+.diag { font-size: 11px; line-height: 1.5; color: var(--dim); background: var(--panel); border-radius: 8px; padding: 8px 10px; margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }

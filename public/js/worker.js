@@ -11,8 +11,12 @@ onmessage = async ({ data: msg }) => {
   switch (msg.type) {
     case "reset":
       session = new ReceiveSession();
+      session.decoder.debug = !!msg.debug;
       sim = null;
       postMessage({ type: "state", id: msg.id, state: session.state(0) });
+      break;
+    case "debug":
+      session.decoder.debug = !!msg.on;
       break;
     case "frame": {
       const img = { width: msg.width, height: msg.height, data: new Uint8ClampedArray(msg.buffer) };

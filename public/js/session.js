@@ -54,6 +54,27 @@ export class ReceiveSession {
       pairing: this.pairing,
       lockedAt: this.lockedAt,
       doneAt: this.doneAt,
+      diag: this.decoder.debug ? this.diagnostics(t) : null,
+    };
+  }
+
+  diagnostics(t) {
+    const d = this.decoder;
+    const best = d.accumulators.reduce((a, b) => (b.blocks === (this.count ?? b.blocks) ? b : a), d.accumulators[0]);
+    let observed = 0;
+    for (const c of best.counts) if (c >= 3) observed++;
+    return {
+      samples: d.samples,
+      processed: d.processed,
+      skippedFiducials: d.skippedFiducials,
+      skippedBars: d.skippedBars,
+      coasted: d.coasted,
+      skew: d.skew,
+      speed: d.speed,
+      votes: d.votes,
+      contrast: d.laneContrast,
+      observed: observed / best.counts.length,
+      t,
     };
   }
 }
