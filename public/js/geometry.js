@@ -51,3 +51,9 @@ export const G = Object.freeze({
   green: [0.12, 0.95, 0.3],
   noteColor: (lane) => (lane === 0 ? G.red : lane % 2 === 1 ? G.white : G.blue),
 });
+
+export const PITCHES = [35, 42, 49, 56, 63, 70];
+
+export function greenNumber(pitch) {
+  return Math.round(((G.judgeY - G.visTop) / (G.rowsPerSecond * pitch)) * 600);
+}

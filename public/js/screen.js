@@ -13,14 +13,14 @@ const TT_DISC = [0.12, 0.12, 0.14];
 const TT_HUB = [0.4, 0.4, 0.42];
 const JUDGE = [0.95, 0.12, 0.1];
 
-function visibleRows(offset, extra) {
-  const p = G.pitch;
+function visibleRows(offset, extra, p) {
   return [Math.floor((offset - p) / p), Math.ceil((G.judgeY + offset - G.visTop + p + extra) / p)];
 }
 
 export class SoftRenderer {
-  constructor(scale, bits, deadLanes = []) {
+  constructor(scale, bits, deadLanes = [], pitch = G.pitch) {
     this.scale = scale;
+    this.pitch = pitch;
     this.bits = bits;
     this.rows = bits.length / 8;
     this.deadLanes = deadLanes;
@@ -117,9 +117,9 @@ export class SoftRenderer {
 
   frame(offset, smear) {
     const px = this.base.slice();
-    const p = G.pitch;
+    const p = this.pitch;
     const left = G.laneX0[0], right = G.laneX1(7);
-    const [kLo, kHi] = visibleRows(offset, smear);
+    const [kLo, kHi] = visibleRows(offset, smear, p);
     for (let k = kLo; k <= kHi; k++) {
       const y = G.judgeY - k * p + offset;
       const row = ((k % this.rows) + this.rows) % this.rows;
@@ -207,9 +207,8 @@ export function drawStatic(ctx) {
   for (const [x, y] of G.fiducials) ctx.fillRect(x - h, y - h, G.fiducialSize, G.fiducialSize);
 }
 
-export function drawChart(ctx, bits, offset) {
+export function drawChart(ctx, bits, offset, p = G.pitch) {
   const rows = bits.length / 8;
-  const p = G.pitch;
   const left = G.laneX0[0], right = G.laneX1(7);
   ctx.save();
   ctx.beginPath();
@@ -222,7 +221,7 @@ export function drawChart(ctx, bits, offset) {
     ctx.fillStyle = lane === 0 ? FILL.scratch : FILL.lane;
     ctx.fillRect(G.laneX0[lane], G.visTop, G.laneWidths[lane], G.judgeY - G.visTop);
   }
-  const [kLo, kHi] = visibleRows(offset, 0);
+  const [kLo, kHi] = visibleRows(offset, 0, p);
   for (let k = kLo; k <= kHi; k++) {
     const y = G.judgeY - k * p + offset;
     const row = ((k % rows) + rows) % rows;

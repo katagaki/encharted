@@ -6,16 +6,17 @@ import { Camera, RNG, SCENARIOS } from "../public/js/camera.js";
 import { ReceiveSession } from "../public/js/session.js";
 import { G } from "../public/js/geometry.js";
 
-export async function runLoopback(text, { scenario = "typical", seed = 2026, fps = 30, maxSeconds = 60, deadLanes = [], t0 = 0, camera: overrides = {} } = {}) {
+export async function runLoopback(text, { scenario = "typical", seed = 2026, fps = 30, maxSeconds = 60, deadLanes = [], t0 = 0, camera: overrides = {}, pitch = G.pitch } = {}) {
   const { bits } = await encodeMessage(text);
-  const renderer = new SoftRenderer(1, bits, deadLanes);
+  const renderer = new SoftRenderer(1, bits, deadLanes, pitch);
+  const speed = G.rowsPerSecond * pitch;
   const rng = new RNG(seed);
   const camera = new Camera({ ...SCENARIOS[scenario], ...overrides }, rng);
   const session = new ReceiveSession();
   let state;
   for (let f = 0; f < maxSeconds * fps; f++) {
     const t = f / fps;
-    const screen = (ts) => renderer.frame(G.speed * (t0 + ts), G.speed / 60);
+    const screen = (ts) => renderer.frame(speed * (t0 + ts), speed / 60);
     state = await session.push(camera.capture(screen, t), t);
     if (state.done) return { ...state, seconds: t };
   }
@@ -41,4 +42,9 @@ test("loopback survives strong rolling shutter", async () => {
   const r = await runLoopback("Rolling shutter", { seed: 5, camera: { readout: 0.06 } });
   assert.equal(r.text, "Rolling shutter");
   assert.ok(r.seconds < 8, `took ${r.seconds}s`);
+});
+
+test("receiver follows the sender's green number setting", async () => {
+  const r = await runLoopback("緑数字", { seed: 11, pitch: 56 });
+  assert.equal(r.text, "緑数字");
 });

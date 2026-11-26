@@ -1,9 +1,14 @@
-import { ChartDecoder, TUNING } from "./decoder.js";
+import { ChartDecoder, TUNING, locateChart } from "./decoder.js";
 import { pairingNumber, preview } from "./codec.js";
+import { PITCHES, greenNumber } from "./geometry.js";
 
 export class ReceiveSession {
   constructor() {
-    this.decoder = new ChartDecoder();
+    this.decoders = PITCHES.map((pitch) => new ChartDecoder({ pitch }));
+    this.debug = false;
+    this.corners = null;
+    this.skippedFiducials = 0;
+    this.locked = 0;
     this.count = null;
     this.received = new Map();
     this.times = new Map();
@@ -17,20 +22,40 @@ export class ReceiveSession {
     return this.doneAt !== null;
   }
 
+  get decoder() {
+    return this.decoders.reduce((a, b) => (b.hits > a.hits ? b : a));
+  }
+
   async push(img, t) {
     if (this.done) return this.state(t);
-    const ok = this.decoder.process(img, t);
-    if (ok && this.lockedAt === null) this.lockedAt = t;
-    if (ok && this.decoder.processed % TUNING.decodeEvery === 0) {
-      for (const p of await this.decoder.decodeBlocks()) {
-        const index = p[0] >> 4, count = p[0] & 0xf;
-        if (this.count === null) {
-          this.count = count;
-          this.decoder.setBlockCount(count);
+    const frame = locateChart(img);
+    this.corners = frame ? frame.corners : null;
+    if (!frame) {
+      this.skippedFiducials++;
+      return this.state(t);
+    }
+    let ok = false;
+    for (const d of this.decoders) {
+      d.debug = this.debug;
+      if (d.track(frame, t)) ok = true;
+    }
+    if (ok) {
+      this.locked++;
+      if (this.lockedAt === null) this.lockedAt = t;
+    }
+    if (ok && this.locked % TUNING.decodeEvery === 0) {
+      const ranked = [...this.decoders].sort((a, b) => b.hits - a.hits).slice(0, TUNING.decodePitches);
+      for (const d of ranked) {
+        for (const p of await d.decodeBlocks()) {
+          const index = p[0] >> 4, count = p[0] & 0xf;
+          if (this.count === null) {
+            this.count = count;
+            for (const other of this.decoders) other.setBlockCount(count);
+          }
+          if (count !== this.count || this.received.has(index)) continue;
+          this.received.set(index, p);
+          this.times.set(index, t);
         }
-        if (count !== this.count || this.received.has(index)) continue;
-        this.received.set(index, p);
-        this.times.set(index, t);
       }
       if (this.count !== null && this.received.size === this.count) {
         this.doneAt = t;
@@ -43,8 +68,8 @@ export class ReceiveSession {
 
   state(t) {
     return {
-      corners: this.decoder.lastCorners,
-      locked: this.decoder.lastCorners !== null,
+      corners: this.corners,
+      locked: this.corners !== null,
       everLocked: this.lockedAt !== null,
       count: this.count,
       blocks: [...this.times.entries()].map(([index, time]) => ({ index, time })),
@@ -54,7 +79,7 @@ export class ReceiveSession {
       pairing: this.pairing,
       lockedAt: this.lockedAt,
       doneAt: this.doneAt,
-      diag: this.decoder.debug ? this.diagnostics(t) : null,
+      diag: this.debug ? this.diagnostics(t) : null,
     };
   }
 
@@ -66,11 +91,12 @@ export class ReceiveSession {
     return {
       samples: d.samples,
       processed: d.processed,
-      skippedFiducials: d.skippedFiducials,
+      skippedFiducials: this.skippedFiducials,
       skippedBars: d.skippedBars,
       coasted: d.coasted,
       skew: d.skew,
-      speed: d.speed,
+      speed: d.speed / d.pitch,
+      greenNumber: greenNumber(d.pitch),
       votes: d.votes,
       contrast: d.laneContrast,
       observed: observed / best.counts.length,

@@ -1,8 +1,23 @@
-import { G } from "./geometry.js";
+import { G, PITCHES, greenNumber } from "./geometry.js";
 import { CHUNK, MAX_TEXT_BYTES, encodeMessage, pairingNumber, utf8Length } from "./codec.js";
 import { drawChart, drawStatic } from "./screen.js";
 
 const PROC_LONG_SIDE = 640;
+const PITCH_KEY = "encharted.pitch";
+
+function loadPitch() {
+  try {
+    const p = Number(localStorage.getItem(PITCH_KEY));
+    if (PITCHES.includes(p)) return p;
+  } catch {}
+  return G.pitch;
+}
+
+function savePitch(p) {
+  try {
+    localStorage.setItem(PITCH_KEY, String(p));
+  } catch {}
+}
 const DEFAULT_TEXT = "今日も楽しく灼熱Beachside Bunnyでお皿を回しまくれえええ";
 
 const $ = (id) => document.getElementById(id);
@@ -154,7 +169,25 @@ async function startSender() {
     stop.style.top = `${layout.oy + 6 * s}px`;
     stop.style.height = `${28 * s}px`;
     stop.style.fontSize = `${14 * s}px`;
+    const speed = $("speed");
+    speed.style.left = `${layout.ox + G.frameX * s}px`;
+    speed.style.width = `${G.frameWidth * s}px`;
+    speed.style.top = `${layout.oy + 796 * s}px`;
+    speed.style.fontSize = `${14 * s}px`;
   };
+  const range = $("pitch-range");
+  let pitch = loadPitch();
+  const showPitch = () => {
+    range.value = String(PITCHES.length - 1 - PITCHES.indexOf(pitch));
+    $("gn").textContent = greenNumber(pitch);
+  };
+  range.max = String(PITCHES.length - 1);
+  range.oninput = () => {
+    pitch = PITCHES[PITCHES.length - 1 - Number(range.value)];
+    savePitch(pitch);
+    showPitch();
+  };
+  showPitch();
   resize();
   addEventListener("resize", resize);
 
@@ -167,14 +200,14 @@ async function startSender() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * ox, dpr * oy);
     drawStatic(ctx);
-    drawChart(ctx, bits, (G.speed * (now - t0)) / 1000);
+    drawChart(ctx, bits, ((G.rowsPerSecond * (now - t0)) / 1000) * pitch, pitch);
     ctx.fillStyle = "#c8c8cc";
     ctx.font = '600 15px system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif';
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.fillText(`ペアリング番号  ${pairing}`, G.frameX + 4, 800);
+    ctx.fillText(`ペアリング番号  ${pairing}`, G.frameX + 4, 778);
     ctx.textAlign = "right";
-    ctx.fillText(`${blocks.length} ブロック`, G.frameX + G.frameWidth - 4, 800);
+    ctx.fillText(`${blocks.length} ブロック`, G.frameX + G.frameWidth - 4, 778);
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);
@@ -275,7 +308,7 @@ function startReceiver() {
         `frames ${g.processed} decoded/s ${arrivals.length}  time ${timeSource} ${g.t.toFixed(2)}`,
         `video ${video.videoWidth}×${video.videoHeight}  proc ${proc.width}×${proc.height}`,
         `no corners ${g.skippedFiducials}  no bar ${g.skippedBars}  coasted ${g.coasted}`,
-        `skew ${g.skew.toFixed(1)}  speed ${(g.speed / G.pitch).toFixed(2)} rows/s  loop votes ${g.votes.join(" ")}`,
+        `skew ${g.skew.toFixed(1)}  speed ${g.speed.toFixed(2)} rows/s  green ${g.greenNumber}  loop votes ${g.votes.join(" ")}`,
         `lane contrast ${g.contrast.map((c) => c.toFixed(2)).join(" ")}`,
         `cells seen ≥3× ${(g.observed * 100).toFixed(0)}%  blocks ${state.count ?? "?"}`,
       ].join("\n");
@@ -425,6 +458,7 @@ function startDemo() {
     const id = ++run;
     const text = utf8Length(message.value) > 0 && utf8Length(message.value) <= MAX_TEXT_BYTES ? message.value : DEFAULT_TEXT;
     const { bits } = await encodeMessage(text);
+    const pitch = loadPitch();
     $("demo-pairing").textContent = await pairingNumber(text);
     if (stopped || id !== run) return;
     sizeChart();
@@ -432,7 +466,7 @@ function startDemo() {
     camCtx.fillRect(0, 0, cam.width, cam.height);
     octx.clearRect(0, 0, over.width, over.height);
     renderProgress(progress, { count: null, everLocked: false });
-    worker.postMessage({ type: "sim-start", id, text, scenario: $("scenario").value, seed: (Math.random() * 2 ** 32) >>> 0 });
+    worker.postMessage({ type: "sim-start", id, text, pitch, scenario: $("scenario").value, seed: (Math.random() * 2 ** 32) >>> 0 });
     let busy = false;
     let finished = null;
     const t0 = performance.now();
@@ -460,7 +494,7 @@ function startDemo() {
       cctx.fillRect(0, 0, chart.width, chart.height);
       cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawStatic(cctx);
-      drawChart(cctx, bits, G.speed * t);
+      drawChart(cctx, bits, G.rowsPerSecond * pitch * t, pitch);
       if (finished === null) {
         $("demo-time").textContent = `${t.toFixed(2)} 秒`;
         if (!busy) {

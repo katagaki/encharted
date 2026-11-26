@@ -206,3 +206,8 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 .diag-toggle { display: inline-flex; gap: 6px; align-items: center; color: var(--dim); font-size: 14px; margin-top: 10px; }
 .diag { font-size: 11px; line-height: 1.5; color: var(--dim); background: var(--panel); border-radius: 8px; padding: 8px 10px; margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.speed { position: absolute; display: flex; align-items: center; gap: 0.8em; color: #c8c8cc; }
+.speed label { white-space: nowrap; font-weight: 600; }
+.speed strong { display: inline-block; min-width: 2.2em; font-variant-numeric: tabular-nums; color: #fff; }
+.speed input { flex: 1; accent-color: #c8c8cc; }
