@@ -38,9 +38,9 @@ export class RNG {
 }
 
 export const SCENARIOS = {
-  clean: { blur: [0.6, 1.0], noise: 0.015, ambient: [0, 0.03], glare: 0, shakeRate: 0, pwm: false, tilt: 0.04, handheld: 0, approach: false },
-  typical: { blur: [1.0, 1.6], noise: 0.035, ambient: [0.04, 0.1], glare: 1, shakeRate: 0.05, pwm: false, tilt: 0.08, handheld: 1, approach: true },
-  harsh: { blur: [1.6, 2.4], noise: 0.06, ambient: [0.1, 0.2], glare: 2, shakeRate: 0.12, pwm: true, tilt: 0.12, handheld: 1, approach: true },
+  clean: { blur: [0.6, 1.0], noise: 0.015, ambient: [0, 0.03], glare: 0, shakeRate: 0, pwm: false, tilt: 0.04, handheld: 0, approach: false, readout: 0 },
+  typical: { blur: [1.0, 1.6], noise: 0.035, ambient: [0.04, 0.1], glare: 1, shakeRate: 0.05, pwm: false, tilt: 0.08, handheld: 1, approach: true, readout: 0.025 },
+  harsh: { blur: [1.6, 2.4], noise: 0.06, ambient: [0.1, 0.2], glare: 2, shakeRate: 0.12, pwm: true, tilt: 0.12, handheld: 1, approach: true, readout: 0.035 },
 };
 
 export class Camera {
@@ -73,6 +73,7 @@ export class Camera {
     this.shakeRate = sc.shakeRate;
     this.handheld = sc.handheld;
     this.approach = sc.approach;
+    this.readout = sc.readout ?? 0;
     this.wobble = Array.from({ length: 8 }, () => ({ f: rng.range(0.15, 0.9), p: rng.range(0, 2 * Math.PI) }));
     this.lastPose = null;
     this.shake = [0, 0];
@@ -121,11 +122,15 @@ export class Camera {
       this.lastPose = p;
     }
     const m = hf.inverse.m;
-    const sw = screen.w / G.screenW;
-    const src = screen.px, sW = screen.w, sH = screen.h;
+    const bands = typeof screen === "function" ? (this.readout > 0 ? 8 : 1) : 1;
+    const shots = typeof screen === "function" ? Array.from({ length: bands }, (_, b) => screen(t + (this.readout * (b + 0.5)) / bands)) : [screen];
+    const sw = shots[0].w / G.screenW;
+    const sW = shots[0].w, sH = shots[0].h;
+    let src = shots[0].px;
     const img = this.img;
     for (let cy = 0; cy < H; cy++) {
       for (let cx = 0; cx < W; cx++) {
+        src = shots[((cx * bands) / W) | 0].px;
         let r = 0, g = 0, b = 0;
         for (let sy = 0; sy < 2; sy++) {
           for (let sx = 0; sx < 2; sx++) {

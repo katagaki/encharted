@@ -14,6 +14,8 @@ export const TUNING = {
   minContrast: 0.06,
   decodeEvery: 3,
   resetAfterGap: 5,
+  coastFor: 0.6,
+  maxSkew: 48,
 };
 
 function sampler(luma, w, h) {
@@ -60,12 +62,18 @@ export class ChartDecoder {
     this.#resetAccumulation();
     this.processed = 0;
     this.rejected = 0;
-    this.barArea = null;
+    this.barAreas = [];
     this.uPrev = null;
     this.tPrev = 0;
     this.lastCorners = null;
     this.skippedFiducials = 0;
     this.skippedBars = 0;
+    this.coasted = 0;
+    this.skew = 0;
+    this.noBars = false;
+    this.debug = false;
+    this.samples = [];
+    this.laneContrast = new Array(8).fill(0);
   }
 
   #resetAccumulation() {
@@ -84,6 +92,7 @@ export class ChartDecoder {
 
   process(img, t) {
     this.lastCorners = null;
+    this.samples = [];
     const { width: w, height: h, data } = img;
     const hom = this.findHomography(img);
     if (!hom) {
@@ -105,6 +114,12 @@ export class ChartDecoder {
     const bar = this.barPhase(at, t);
     if (!bar) {
       this.skippedBars++;
+      if (this.noBars && this.uPrev !== null && t - this.tPrev < TUNING.coastFor) {
+        this.coasted++;
+        this.sampleCells(at, hom, this.uPrev + this.speed * (t - this.tPrev));
+        this.processed++;
+        return true;
+      }
       return false;
     }
     const m = G.measure;
@@ -124,7 +139,7 @@ export class ChartDecoder {
       const kL = (G.judgeY + u - (bar.loopY - G.pitch / 2)) / G.pitch;
       this.votes[(((-Math.round(kL / 8)) % 4) + 4) % 4] += 1;
     }
-    this.sampleCells(at, u);
+    this.sampleCells(at, hom, u);
     this.processed++;
     return true;
   }
@@ -166,39 +181,53 @@ export class ChartDecoder {
 
   barPhase(at, t) {
     const y0 = G.visTop + 2, y1 = G.judgeY - 2;
-    const p = [];
-    for (let y = y0; y <= y1; y++) {
-      let s = 0;
-      for (const gx of [G.leftGutterX, G.rightGutterX]) for (const dx of [-3, 0, 3]) s += at(gx + dx, y);
-      p.push(s / 6);
-    }
+    const n = y1 - y0 + 1;
     const win = TUNING.barWindow;
-    const d = new Float32Array(p.length);
-    let dMax = 0;
-    for (let i = 0; i < p.length; i++) {
-      let lo = Infinity;
-      for (let j = Math.max(0, i - win); j <= Math.min(p.length - 1, i + win); j++) lo = Math.min(lo, p[j]);
-      d[i] = p[i] - lo;
-      dMax = Math.max(dMax, d[i]);
+    const detrend = (q) => {
+      const d = new Float32Array(q.length);
+      for (let i = 0; i < q.length; i++) {
+        let lo = Infinity;
+        for (let j = Math.max(0, i - win); j <= Math.min(q.length - 1, i + win); j++) lo = Math.min(lo, q[j]);
+        d[i] = q[i] - lo;
+      }
+      return d;
+    };
+    const half = this.skew / 2;
+    const pl = new Float32Array(n), pr = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const y = y0 + i;
+      let l = 0, r = 0;
+      for (const dx of [-3, 0, 3]) {
+        l += at(G.leftGutterX + dx, y - half);
+        r += at(G.rightGutterX + dx, y + half);
+      }
+      pl[i] = l / 3;
+      pr[i] = r / 3;
     }
+    const pc = new Float32Array(n);
+    for (let i = 0; i < n; i++) pc[i] = (pl[i] + pr[i]) / 2;
+    const d = detrend(pc), dl = detrend(pl), dr = detrend(pr);
+    let dMax = 0;
+    for (let i = 0; i < n; i++) dMax = Math.max(dMax, d[i]);
     const thr = Math.max(0.08, 0.2 * dMax);
     let regions = [];
-    for (let i = 0; i < d.length; ) {
+    for (let i = 0; i < n; ) {
       if (!(d[i] > thr)) {
         i++;
         continue;
       }
       let a = i, b = i;
       while (a > 0 && d[a - 1] > thr / 2) a--;
-      while (b < d.length - 1 && d[b + 1] > thr / 2) b++;
+      while (b < n - 1 && d[b + 1] > thr / 2) b++;
       let area = 0, moment = 0;
       for (let k = a; k <= b; k++) {
         area += d[k];
         moment += d[k] * (y0 + k);
       }
-      if (a > 3 && b < d.length - 4) regions.push({ y: moment / area, area });
+      if (a > 3 && b < n - 4) regions.push({ y: moment / area, area });
       i = b + 1;
     }
+    this.noBars = regions.length === 0;
     if (!regions.length) return null;
     const m = G.measure;
     const phase = (y) => {
@@ -232,26 +261,44 @@ export class ChartDecoder {
     const kept = regions.filter((r) => Math.abs(signed(phase(r.y), phase(ref.y))) < 8);
     let phi = phase(ref.y) + kept.reduce((s, r) => s + signed(phase(r.y), phase(ref.y)), 0) / kept.length;
     if (phi < 0) phi += m;
+    const areas = this.barAreas;
+    const barArea = areas.length >= 4 ? [...areas].sort((a, b) => a - b)[Math.floor(areas.length * 0.3)] : null;
     let loop = null;
-    if (kept.length >= 2) {
-      const amin = Math.min(...kept.map((r) => r.area));
-      const top = kept.reduce((a, b) => (b.area > a.area ? b : a));
-      if (top.area > TUNING.loopMarkerRatio * amin) loop = top;
-    } else if (this.barArea !== null && kept[0].area > TUNING.loopMarkerRatio * this.barArea) {
-      loop = kept[0];
-    }
     for (const r of kept) {
-      if (r !== loop) this.barArea = this.barArea === null ? r.area : 0.9 * this.barArea + 0.1 * r.area;
+      if (barArea !== null && r.area > TUNING.loopMarkerRatio * barArea) loop = r;
+      areas.push(r.area);
+      if (areas.length > 24) areas.shift();
+    }
+    const lim = TUNING.maxSkew;
+    const centroid = (q, y) => {
+      let a = 0, mo = 0;
+      for (let k = Math.max(0, Math.round(y - y0 - lim)); k <= Math.min(n - 1, Math.round(y - y0 + lim)); k++) {
+        const v = q[k] - thr / 2;
+        if (v > 0) {
+          a += v;
+          mo += v * (y0 + k);
+        }
+      }
+      return a > 0.05 ? mo / a : null;
+    };
+    for (const r of kept) {
+      if (r === loop) continue;
+      const yl = centroid(dl, r.y), yr = centroid(dr, r.y);
+      if (yl !== null && yr !== null) {
+        this.skew = Math.max(-lim, Math.min(lim, this.skew + 0.25 * (yr - yl)));
+      }
     }
     return { phi, loopY: loop ? loop.y : null };
   }
 
-  sampleCells(at, u) {
+  sampleCells(at, hom, u0) {
     const p = G.pitch;
-    const kLo = Math.ceil((u + 8) / p), kHi = Math.floor((G.judgeY + u - G.visTop - 8) / p);
-    if (kLo > kHi) return;
+    const span = G.rightGutterX - G.leftGutterX;
     for (let lane = 0; lane < 8; lane++) {
       const w = G.laneWidths[lane], cx = G.laneX0[lane] + w / 2, hw = w * 0.25;
+      const u = u0 + ((cx - G.leftGutterX) / span - 0.5) * this.skew;
+      const kLo = Math.ceil((u + 8) / p), kHi = Math.floor((G.judgeY + u - G.visTop - 8) / p);
+      if (kLo > kHi) continue;
       const avg = (y) => (at(cx - hw, y) + at(cx, y) + at(cx + hw, y)) / 3;
       const vals = [];
       for (let k = kLo; k <= kHi; k++) {
@@ -265,10 +312,12 @@ export class ChartDecoder {
       const sorted = vals.map((v) => v[1]).sort((a, b) => b - a);
       const top = sorted.slice(0, Math.max(2, Math.floor(sorted.length / 4)));
       const c = top.reduce((a, b) => a + b, 0) / top.length;
+      this.laneContrast[lane] = c;
       if (!(c > TUNING.minContrast)) continue;
       for (const [k, v] of vals) {
         const s = Math.max(-1, Math.min(1, (v - c / 2) / (c / 2)));
         for (const acc of this.accumulators) acc.add(k, lane, s);
+        if (this.debug) this.samples.push([...hom.apply(cx, G.judgeY - k * p + u), s]);
       }
     }
   }

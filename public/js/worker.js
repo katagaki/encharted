@@ -30,8 +30,7 @@ onmessage = async ({ data: msg }) => {
     }
     case "sim-frame": {
       if (!sim) break;
-      const screen = sim.renderer.frame(G.speed * msg.t, G.speed / 60);
-      const img = sim.camera.capture(screen, msg.t);
+      const img = sim.camera.capture((ts) => sim.renderer.frame(G.speed * ts, G.speed / 60), msg.t);
       const state = await session.push(img, msg.t);
       postMessage({ type: "sim", id: msg.id, state, image: { width: img.width, height: img.height, buffer: img.data.buffer } }, [img.data.buffer]);
       break;

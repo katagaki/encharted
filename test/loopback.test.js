@@ -6,16 +6,16 @@ import { Camera, RNG, SCENARIOS } from "../public/js/camera.js";
 import { ReceiveSession } from "../public/js/session.js";
 import { G } from "../public/js/geometry.js";
 
-export async function runLoopback(text, { scenario = "typical", seed = 2026, fps = 30, maxSeconds = 40, deadLanes = [], t0 = 0 } = {}) {
+export async function runLoopback(text, { scenario = "typical", seed = 2026, fps = 30, maxSeconds = 60, deadLanes = [], t0 = 0, camera: overrides = {} } = {}) {
   const { bits } = await encodeMessage(text);
   const renderer = new SoftRenderer(1, bits, deadLanes);
   const rng = new RNG(seed);
-  const camera = new Camera(SCENARIOS[scenario], rng);
+  const camera = new Camera({ ...SCENARIOS[scenario], ...overrides }, rng);
   const session = new ReceiveSession();
   let state;
   for (let f = 0; f < maxSeconds * fps; f++) {
     const t = f / fps;
-    const screen = renderer.frame(G.speed * (t0 + t), G.speed / 60);
+    const screen = (ts) => renderer.frame(G.speed * (t0 + ts), G.speed / 60);
     state = await session.push(camera.capture(screen, t), t);
     if (state.done) return { ...state, seconds: t };
   }
@@ -35,4 +35,10 @@ test("loopback decodes a one-block message quickly with two dead lanes", async (
   const r = await runLoopback("Seven Times Four", { seed: 9, t0: 1.3, deadLanes: [{ lane: 2, bright: true }, { lane: 6, bright: false }] });
   assert.equal(r.text, "Seven Times Four");
   assert.ok(r.seconds < 10, `took ${r.seconds}s`);
+});
+
+test("loopback survives strong rolling shutter", async () => {
+  const r = await runLoopback("Rolling shutter", { seed: 5, camera: { readout: 0.06 } });
+  assert.equal(r.text, "Rolling shutter");
+  assert.ok(r.seconds < 12, `took ${r.seconds}s`);
 });
