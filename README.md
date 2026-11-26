@@ -49,7 +49,7 @@ The site is served by Cloudflare Workers as static assets from `public/` (see `w
 
 ## Format
 
-The byte format is the same as the Swift reference prototype's, so a native receiver can be added later. The row spacing and speed match the reference run with `PITCH=70 RPS=24`.
+The byte format is the same as the Swift reference prototype's, so a native receiver can be added later. The default row spacing and speed match the reference run with `PITCH=70 RPS=24`.
 
 ### Playfield
 
@@ -58,11 +58,12 @@ All values are in logical units on a 390 × 844 portrait canvas. The canvas is s
 - **Lanes:** 8 lanes, scratch first, with widths `[54, 38, 32, 38, 32, 38, 32, 38]`, 3-unit dividers and a 14-unit gutter on each side. The frame is 357 units wide and centred.
 - **Note colours:** scratch is red `(1.0, 0.18, 0.16)`, keys 1, 3, 5 and 7 are white `(0.95, 0.95, 0.97)` and keys 2, 4 and 6 are blue `(0.22, 0.48, 1.0)`.
 - **Vertical layout:** the frame top is at 40, notes are visible from 64 to the judgment line at 700, and the frame bottom is at 760.
-- **Rows:** 70 units per row, notes 14 units tall, and 8 rows (560 units) per measure.
-- **Scroll speed:** fixed at 24 rows/s (1680 units/s). It's part of the protocol, because the receiver uses it to predict the scroll position.
-  - Row `k` is centred at `y = 700 − 70k + offset`, where `offset = 1680 · t`.
+- **Rows:** 70 units per row by default, notes 14 units tall, and 8 rows per measure.
+- **Green number:** a slider under the chart sets the row spacing to 35, 42, 49, 56, 63 or 70 units. As in IIDX, the green number is how long a note is on screen, in 1/600 s: 454 to 227. The tempo stays at 24 rows/s, so the data rate doesn't change. The receiver tracks every allowed spacing at once and decodes with the ones that lock best.
+- **Scroll speed:** fixed at 24 rows/s (1680 units/s at the default spacing). It's part of the protocol, because the receiver uses it to predict the scroll position.
+  - Row `k` is centred at `y = 700 − pitch · k + offset`, where `offset = 24 · pitch · t`.
   - Its data row is `k mod rows`.
-- **Bar lines:** drawn on rows where `row % 8 == 0`, at `y + 35`.
+- **Bar lines:** drawn on rows where `row % 8 == 0`, at `y + pitch / 2`.
   - Across the lanes: a grey line (0.45), 2 units thick.
   - In both gutters: an 8-unit mark (0.85).
   - At block starts (`row % 32 == 0`), the gutter mark is 28 units tall instead. This is the loop-start marker.
@@ -86,7 +87,7 @@ chart[i] = codeword[i] XOR SHA-256("DJDX-CHART1-WHITEN")[i]
 
 ### Decoding
 
-1. **Corners:** pixels where `G − max(R, B)` is above 0.18 are grouped into blobs. The 4 largest become the corners, and a 4-point homography is fitted.
+1. **Corners:** pixels where `G − max(R, B)` is above a threshold are grouped into blobs. The threshold adapts to the greenest pixels in the frame, between 0.06 and 0.18. Of the largest blobs, the 4 that best form the expected tall rectangle, with similar-sized corners, are chosen, and the red judgment line is checked where they predict it. A 4-point homography is then fitted.
 2. **Phase:** a brightness profile (`max(R, G, B)`) is taken down both gutters, and the running minimum over ±30 units is subtracted. Peaks give the measure phase.
    - The phase is unwrapped using the known speed and the real frame timestamps (`requestVideoFrameCallback` `captureTime`, or `mediaTime` where that's missing).
    - A phone camera's rolling shutter captures the left gutter at a different moment from the right one, so the chart appears slanted. The decoder tracks this slant from the two gutters, aligns them before finding bars, and shifts each lane's samples to match.
