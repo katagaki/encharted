@@ -66,7 +66,6 @@ export class ChartDecoder {
     this.lastCorners = null;
     this.skippedFiducials = 0;
     this.skippedBars = 0;
-    this.tried = new Set();
   }
 
   #resetAccumulation() {

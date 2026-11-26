@@ -30,7 +30,7 @@ export class ReceiveSession {
         }
         if (count !== this.count || this.received.has(index)) continue;
         this.received.set(index, p);
-        this.times.set(index, t - this.lockedAt);
+        this.times.set(index, t);
       }
       if (this.count !== null && this.received.size === this.count) {
         this.doneAt = t;
@@ -52,7 +52,8 @@ export class ReceiveSession {
       done: this.done,
       text: this.text,
       pairing: this.pairing,
-      elapsed: this.lockedAt === null ? 0 : (this.doneAt ?? t) - this.lockedAt,
+      lockedAt: this.lockedAt,
+      doneAt: this.doneAt,
     };
   }
 }

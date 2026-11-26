@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0e">
+  <meta name="description" content="Send text by playing a rhythm-game chart. Receive it with a camera.">
+  <title>Encharted</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <main id="home" class="view">
+    <header class="hero">
+      <h1>Encharted</h1>
+      <p>Send text by playing a falling-note chart. Receive it by pointing a camera at the screen.</p>
+    </header>
+    <nav class="choices">
+      <a class="choice" href="#send">
+        <span class="choice-title">Send</span>
+        <span class="choice-sub">Type a message and play it as a chart</span>
+      </a>
+      <a class="choice" href="#receive">
+        <span class="choice-title">Receive</span>
+        <span class="choice-sub">Point your camera at the sender’s screen</span>
+      </a>
+    </nav>
+    <p class="aside"><a href="#demo">Loopback demo</a> — try both sides on one device</p>
+  </main>
+
+  <main id="send" class="view" hidden>
+    <a class="back" href="#">‹ Back</a>
+    <h2>Send</h2>
+    <label for="message" class="label">Message</label>
+    <textarea id="message" rows="5" spellcheck="false">今日も楽しく灼熱Beachside Bunnyでお皿を回しまくれえええ</textarea>
+    <div class="meta">
+      <span id="byte-count"></span>
+      <span id="block-count"></span>
+    </div>
+    <button id="start" class="primary">Start</button>
+    <p class="hint">The chart loops until you stop it. Turn the brightness up and hold the receiver’s camera so that all four corner markers are in view.</p>
+  </main>
+
+  <div id="player" hidden>
+    <canvas id="chart"></canvas>
+    <button id="stop" class="stop">Stop</button>
+  </div>
+
+  <main id="receive" class="view" hidden>
+    <a class="back" href="#">‹ Back</a>
+    <div class="viewfinder">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div id="rx-status" class="status">Starting camera…</div>
+    </div>
+    <div id="rx-error" class="error" hidden></div>
+    <section id="rx-progress" class="progress"></section>
+  </main>
+
+  <main id="demo" class="view wide" hidden>
+    <a class="back" href="#">‹ Back</a>
+    <div class="demo-head">
+      <h2>Loopback demo</h2>
+      <div class="demo-controls">
+        <select id="scenario" aria-label="Camera conditions">
+          <option value="typical">Hand-held, typical</option>
+          <option value="harsh">Hand-held, harsh</option>
+          <option value="clean">Clean, tripod</option>
+        </select>
+        <button id="restart">Restart</button>
+      </div>
+    </div>
+    <div class="demo-grid">
+      <section class="panel">
+        <h3>Sender</h3>
+        <p class="panel-sub">Pairing number <strong id="demo-pairing">----</strong></p>
+        <canvas id="demo-chart"></canvas>
+      </section>
+      <section class="panel">
+        <h3>Receiver camera</h3>
+        <p class="panel-sub"><strong id="demo-time">0.00 s</strong> <span id="demo-status" class="state">Searching for chart…</span></p>
+        <div class="simcam">
+          <canvas id="demo-camera" width="216" height="384"></canvas>
+          <canvas id="demo-overlay" width="432" height="768"></canvas>
+        </div>
+      </section>
+      <section class="panel">
+        <h3>Decoded</h3>
+        <div id="demo-progress" class="progress"></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
