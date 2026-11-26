@@ -34,11 +34,11 @@ test("loopback decodes the demo message through the handheld camera model", asyn
 test("loopback decodes a one-block message quickly with two dead lanes", async () => {
   const r = await runLoopback("Seven Times Four", { seed: 9, t0: 1.3, deadLanes: [{ lane: 2, bright: true }, { lane: 6, bright: false }] });
   assert.equal(r.text, "Seven Times Four");
-  assert.ok(r.seconds < 10, `took ${r.seconds}s`);
+  assert.ok(r.seconds < 6, `took ${r.seconds}s`);
 });
 
 test("loopback survives strong rolling shutter", async () => {
   const r = await runLoopback("Rolling shutter", { seed: 5, camera: { readout: 0.06 } });
   assert.equal(r.text, "Rolling shutter");
-  assert.ok(r.seconds < 12, `took ${r.seconds}s`);
+  assert.ok(r.seconds < 8, `took ${r.seconds}s`);
 });

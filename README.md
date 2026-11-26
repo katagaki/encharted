@@ -49,7 +49,7 @@ The site is served by Cloudflare Workers as static assets from `public/` (see `w
 
 ## Format
 
-The byte format is the same as the Swift reference prototype's, so a native receiver can be added later. The row spacing and speed match the reference run with `PITCH=112 RPS=8`.
+The byte format is the same as the Swift reference prototype's, so a native receiver can be added later. The row spacing and speed match the reference run with `PITCH=70 RPS=24`.
 
 ### Playfield
 
@@ -58,11 +58,11 @@ All values are in logical units on a 390 × 844 portrait canvas. The canvas is s
 - **Lanes:** 8 lanes, scratch first, with widths `[54, 38, 32, 38, 32, 38, 32, 38]`, 3-unit dividers and a 14-unit gutter on each side. The frame is 357 units wide and centred.
 - **Note colours:** scratch is red `(1.0, 0.18, 0.16)`, keys 1, 3, 5 and 7 are white `(0.95, 0.95, 0.97)` and keys 2, 4 and 6 are blue `(0.22, 0.48, 1.0)`.
 - **Vertical layout:** the frame top is at 40, notes are visible from 64 to the judgment line at 700, and the frame bottom is at 760.
-- **Rows:** 112 units per row, notes 14 units tall, and 8 rows (896 units) per measure.
-- **Scroll speed:** fixed at 8 rows/s (896 units/s). It's part of the protocol, because the receiver uses it to predict the scroll position.
-  - Row `k` is centred at `y = 700 − 112k + offset`, where `offset = 896 · t`.
+- **Rows:** 70 units per row, notes 14 units tall, and 8 rows (560 units) per measure.
+- **Scroll speed:** fixed at 24 rows/s (1680 units/s). It's part of the protocol, because the receiver uses it to predict the scroll position.
+  - Row `k` is centred at `y = 700 − 70k + offset`, where `offset = 1680 · t`.
   - Its data row is `k mod rows`.
-- **Bar lines:** drawn on rows where `row % 8 == 0`, at `y + 56`.
+- **Bar lines:** drawn on rows where `row % 8 == 0`, at `y + 35`.
   - Across the lanes: a grey line (0.45), 2 units thick.
   - In both gutters: an 8-unit mark (0.85).
   - At block starts (`row % 32 == 0`), the gutter mark is 28 units tall instead. This is the loop-start marker.

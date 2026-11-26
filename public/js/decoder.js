@@ -15,7 +15,7 @@ export const TUNING = {
   decodeEvery: 3,
   resetAfterGap: 5,
   coastFor: 0.6,
-  maxSkew: 48,
+  maxSkew: 80,
 };
 
 function sampler(luma, w, h) {
